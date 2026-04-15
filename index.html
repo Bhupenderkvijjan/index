@@ -5,40 +5,32 @@ async function getSymbols(){
     return text.split('\n').map(s => s.trim()).filter(s => s);
 }
 
-// ✅ safer fetch
 async function fetchData(symbol){
-    try{
-        const proxy = "https://api.allorigins.win/raw?url=";
-        const url = proxy + encodeURIComponent(
-            `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=15m&range=1d`
-        );
+    const proxy = "https://api.allorigins.win/raw?url=";
+    const url = proxy + encodeURIComponent(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=15m&range=1d`
+    );
 
-        const res = await fetch(url);
-        const data = await res.json();
+    const res = await fetch(url);
+    const data = await res.json();
 
-        if(!data.chart || !data.chart.result) throw "No data";
-
-        const result = data.chart.result[0];
-
-        if(!result.timestamp) throw "No candles";
-
-        const t = result.timestamp.map(x => new Date(x*1000));
-        const q = result.indicators.quote[0];
-
-        return {
-            t,
-            o: q.open,
-            h: q.high,
-            l: q.low,
-            c: q.close
-        };
-
-    }catch(err){
-        throw symbol + " failed";
+    // ✅ SAFE CHECK (IMPORTANT)
+    if (!data.chart || !data.chart.result) {
+        throw new Error("No data");
     }
+
+    const result = data.chart.result[0];
+
+    return {
+        t: result.timestamp.map(x => new Date(x * 1000)),
+        o: result.indicators.quote[0].open,
+        h: result.indicators.quote[0].high,
+        l: result.indicators.quote[0].low,
+        c: result.indicators.quote[0].close
+    };
 }
 
-// ✅ small delay (important)
+// ✅ SMALL DELAY FUNCTION (AVOID RATE LIMIT)
 function delay(ms){
     return new Promise(res => setTimeout(res, ms));
 }
@@ -48,33 +40,21 @@ async function loadCharts(){
     const container = document.getElementById("charts");
     container.innerHTML = "";
 
-    // ✅ create all cards first
-    const chartMap = {};
+    // ✅ PROCESS IN BATCHES (VERY IMPORTANT)
+    for (let i = 0; i < symbols.length; i++) {
+        const sym = symbols[i];
 
-    symbols.forEach(sym => {
         const div = document.createElement("div");
         div.className = "card";
-
         const chartDiv = document.createElement("div");
-        chartDiv.innerHTML = "Loading " + sym + "...";
-
         div.appendChild(chartDiv);
         container.appendChild(div);
-
-        chartMap[sym] = chartDiv;
-    });
-
-    // ✅ parallel + controlled calls
-    const promises = symbols.map(async (sym, i) => {
-        await delay(i * 200); // 🔥 avoids rate limit
 
         try{
             const d = await fetchData(sym);
 
-            if(!d || d.t.length === 0) throw "Empty";
-
             const firstHigh = d.h[0];
-            const firstLow  = d.l[0];
+            const firstLow = d.l[0];
 
             const trace = {
                 x: d.t,
@@ -95,7 +75,7 @@ async function loadCharts(){
                         x1:d.t[d.t.length-1],
                         y0:firstHigh,
                         y1:firstHigh,
-                        line:{dash:'dash', color:'red'}
+                        line:{dash:'dash'}
                     },
                     {
                         type:'line',
@@ -103,19 +83,20 @@ async function loadCharts(){
                         x1:d.t[d.t.length-1],
                         y0:firstLow,
                         y1:firstLow,
-                        line:{dash:'dash', color:'green'}
+                        line:{dash:'dash'}
                     }
                 ]
             };
 
-            Plotly.newPlot(chartMap[sym], [trace], layout);
+            Plotly.newPlot(chartDiv, [trace], layout, {responsive:true});
 
         }catch(e){
-            chartMap[sym].innerHTML = "❌ Error loading " + sym;
+            chartDiv.innerHTML = "❌ Error loading " + sym;
         }
-    });
 
-    await Promise.allSettled(promises);
+        // ✅ ADD DELAY (CRITICAL FIX)
+        await delay(400);   // adjust 300–700ms if needed
+    }
 }
 
 loadCharts();
