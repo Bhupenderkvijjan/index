@@ -26,7 +26,9 @@ button { padding:8px 12px; cursor:pointer; }
 
 <script>
 async function fetchData(symbol){
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=15m&range=1d`;
+    // Using CORS proxy to bypass Yahoo blocking
+    const proxy = "https://api.allorigins.win/raw?url=";
+    const url = proxy + encodeURIComponent(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=15m&range=1d`);
     const res = await fetch(url);
     const data = await res.json();
 
